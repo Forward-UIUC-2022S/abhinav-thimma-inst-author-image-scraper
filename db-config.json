@@ -1,7 +1,7 @@
 {
-    "HOST" : "127.0.0.1",
-    "PORT" : 3308,
-    "USER" : "root",
-    "PWD" : "education_uiuc_pwd",
-    "DB" : "education_uiuc"
+    "HOST" : "<ENTER HOST>",
+    "PORT" : "<ENTER PORT>",
+    "USER" : "<ENTER USER>",
+    "PWD" : "<ENTER PASSWORD>",
+    "DB" : "<ENTER DATABASE>"
 }

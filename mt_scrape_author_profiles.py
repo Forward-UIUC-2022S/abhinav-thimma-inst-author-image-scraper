@@ -26,65 +26,69 @@ import argparse
 from tqdm import tqdm
 import json
 
-author_ts = []
-author_id_to_url = {}
+class AuthorProfileImageScraper:
+    def __init__(self) -> None:
+        pass
+        self.author_ts = []
+        self.author_id_to_url = {}
+    
+    def get_author_ts(self):
+        return self.author_ts
+    
+    def get_author_id_to_url(self):
+        return self.author_id_to_url
+
+    def update_authors_with_missing_photo(self, cursor):
+        cursor.execute("""
+        SELECT Author.id, Author.name, Institution.name
+        FROM Author
+        JOIN Department  ON department_id = Department.id
+        JOIN Institution ON institution_id = Institution.id
+        WHERE Author.photo_url IS NULL
+        """)
+
+        self.author_ts = cursor.fetchall()
 
 
-def update_authors_with_missing_photo(cursor):
-    global author_ts, author_id_to_url, db
+    def thread_search(self, task_lock, write_lock, pbar):
+        pid = threading.get_ident()
+        image_scrapper = GoogleImageScraper(verbose=False)
+        num_local_scraped = 0
+        print("Initialzed thread {}".format(pid))
 
-    cursor.execute("""
-    SELECT Author.id, Author.name, Institution.name
-    FROM Author
-    JOIN Department  ON department_id = Department.id
-    JOIN Institution ON institution_id = Institution.id
-    WHERE Author.photo_url IS NULL
-    """)
+        while True:
 
-    author_ts = cursor.fetchall()
+            # Critical section, checking remaining authors
+            task_lock.acquire()
+            curr_author_t = None
+            if len(self.author_ts) > 0:
+                curr_author_t = self.author_ts.pop()
+            task_lock.release()
 
+            if curr_author_t is None:
+                break
+            else:
+                curr_author_id = curr_author_t[0]
+                query_str = curr_author_t[1] + " " + curr_author_t[2]
+                query_str = html.unescape(query_str)
 
-def thread_search(task_lock, write_lock, pbar):
-    pid = threading.get_ident()
-    image_scrapper = GoogleImageScraper(verbose=False)
-    num_local_scraped = 0
-    global author_ts, author_id_to_url
+                image_url = image_scrapper.find_image_urls(query_str)
 
-    print("Initialzed thread {}".format(pid))
+                if num_local_scraped % 20 == 0:
+                    print("Thread {} found {} for {}".format(
+                        pid, image_url, query_str))
 
-    while True:
+                write_lock.acquire()
+                self.author_id_to_url[curr_author_id] = image_url
+                write_lock.release()
 
-        # Critical section, checking remaining authors
-        task_lock.acquire()
-        curr_author_t = None
-        if len(author_ts) > 0:
-            curr_author_t = author_ts.pop()
-        task_lock.release()
+            pbar.update(1)
+            num_local_scraped += 1
 
-        if curr_author_t is None:
-            break
-        else:
-            curr_author_id = curr_author_t[0]
-            query_str = curr_author_t[1] + " " + curr_author_t[2]
-            query_str = html.unescape(query_str)
+            if num_local_scraped % 40 == 0:
+                image_scrapper.reinitialize_driver()
 
-            image_url = image_scrapper.find_image_urls(query_str)
-
-            if num_local_scraped % 20 == 0:
-                print("Thread {} found {} for {}".format(
-                    pid, image_url, query_str))
-
-            write_lock.acquire()
-            author_id_to_url[curr_author_id] = image_url
-            write_lock.release()
-
-        pbar.update(1)
-        num_local_scraped += 1
-
-        if num_local_scraped % 40 == 0:
-            image_scrapper.reinitialize_driver()
-
-    image_scrapper.close_driver()
+        image_scrapper.close_driver()
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Run baselines.")
@@ -93,6 +97,7 @@ def parse_args():
                         help='Path to database config json file.')
     parser.add_argument('--num_threads', type=int,
                         help='Number of threads to use.')
+    parser.add_argument('--store_results_to_file', type=str, help='Path to store results.')
     return parser.parse_args()
 
 if __name__ == "__main__":
@@ -114,7 +119,8 @@ if __name__ == "__main__":
     cursor = db.cursor(buffered=True)
     print('DB connected')
 
-    update_authors_with_missing_photo(cursor)
+    author_image_scraper = AuthorProfileImageScraper()
+    author_image_scraper.update_authors_with_missing_photo(cursor)
     print('Missing Author image list updated')
 
     # Main program params
@@ -123,12 +129,12 @@ if __name__ == "__main__":
     write_lock = threading.Lock()
 
     threads = []
-    pbar = tqdm(total=len(author_ts))
+    pbar = tqdm(total=len(author_image_scraper.get_author_ts()))
 
     # Starting threads
     for i in range(num_threads):
         curr_thread = threading.Thread(
-            target=thread_search, args=(task_lock, write_lock, pbar))
+            target=author_image_scraper.thread_search, args=(task_lock, write_lock, pbar))
         curr_thread.start()
         threads.append(curr_thread)
 
@@ -139,7 +145,7 @@ if __name__ == "__main__":
     print("Done acquiring photos. Writing to database...")
 
     # Updating database with photo url entries
-    for id, photo_url in author_id_to_url.items():
+    for id, photo_url in author_image_scraper.get_author_id_to_url().items():
         if photo_url is None:
             continue
 
@@ -154,3 +160,10 @@ if __name__ == "__main__":
     cursor.close()
     db.commit()
     pbar.close()
+
+    # storing the results to a file
+    if(args.store_results_to_file):
+        with open(args.store_results_to_file, 'w') as f:
+            f.write('AuthorId, PhotoUrl\n')
+            for id, photo_url in author_image_scraper.get_author_id_to_url().items():
+                f.write(f'{id}, {photo_url}\n')

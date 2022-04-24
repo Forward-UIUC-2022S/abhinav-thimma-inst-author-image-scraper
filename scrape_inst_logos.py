@@ -27,6 +27,7 @@ def scrape_and_update_institution_logos(db, cursor):
 
     inst_i = 0
     inst_t = cursor.fetchone()
+    scraped_url_map = {}
 
     while inst_t is not None:
 
@@ -35,6 +36,7 @@ def scrape_and_update_institution_logos(db, cursor):
 
         query_str = inst_t[1] + " png"
         image_url = image_scrapper.find_image_urls(query_str)
+        scraped_url_map[inst_t[0]] = image_url
 
         if image_url is not None:
 
@@ -59,12 +61,14 @@ def scrape_and_update_institution_logos(db, cursor):
 
     db.commit()
     image_scrapper.close_driver()
+    return scraped_url_map
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Run baselines.")
 
     parser.add_argument('--db_config', type=str,
                         help='Path to database config json file.')
+    parser.add_argument('--store_results_to_file', type=str, help='Path to store results.')
     return parser.parse_args()
 
 
@@ -87,4 +91,11 @@ if __name__ == "__main__":
     cursor = db.cursor(buffered=True)
     print('DB connected')
 
-    scrape_and_update_institution_logos(db, cursor)
+    scraped_url_map = scrape_and_update_institution_logos(db, cursor)
+    
+    # storing results to a file
+    if(args.store_results_to_file):
+        with open(args.store_results_to_file, 'w') as f:
+            f.write('DepartmentId, PhotoUrl\n')
+            for dept_id, photo_url in scraped_url_map.items():
+                f.write(f'{dept_id}, {photo_url}\n')

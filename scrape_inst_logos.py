@@ -13,6 +13,12 @@ import argparse
 import json
 
 def scrape_and_update_institution_logos(db, cursor):
+    '''
+    This function:
+    - finds the departments which are missing a logo
+    - Scrape Google images for the logo of the department
+    - Update the database with the new logo
+    '''
     update_cursor = db.cursor()
     image_scrapper = GoogleImageScraper(verbose=False)
 

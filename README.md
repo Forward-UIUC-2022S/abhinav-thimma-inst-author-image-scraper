@@ -24,6 +24,20 @@ version
 2. Fetching and saving institutions logo images:
     > python scrape_inst_logos.py --db_config db-config.json --store_results_to_file ./inst_logo_results.csv
 
+### Parameter description:
+1. --db_config: path to a json file containing db configuration information of the following format:
+    ```
+    {
+        "HOST" : "<HOST_URL>",
+        "PORT" : 3308,
+        "USER" : "<USER>",
+        "PWD" : "<Password>",
+        "DB" : "<DB_NAME>"
+    }
+    ```
+2. --store_results_to_file: We can pass a csv filename here. The results of scraping (AuthorId and ImageURL) will be saved in a filename which is passed.
+3. --num_threads: Takes a number as input and is used to spawn specified number of threads for extracting and updating faculty image url in the DB.
+
 ## Importing specific functions/ classes:
 1. Scraping Author images which are missing a image_url in MAG database
 

@@ -29,7 +29,7 @@ import json
 class AuthorProfileImageScraper:
     def __init__(self) -> None:
         pass
-        self.author_ts = []
+        self.author_ts = [] # This variable is used a shared queue between multiple threads
         self.author_id_to_url = {}
     
     def get_author_ts(self):
@@ -51,6 +51,12 @@ class AuthorProfileImageScraper:
 
 
     def thread_search(self, task_lock, write_lock, pbar):
+        '''
+        This function is run on multiple threads.
+        - It takes a task from the queue (in a synchronized way)
+        - It searches for the image of the author
+        - It updates the database with the image url
+        '''
         pid = threading.get_ident()
         image_scrapper = GoogleImageScraper(verbose=False)
         num_local_scraped = 0
